@@ -51,8 +51,8 @@ function drawLanes(ctx, stripeOffset = 0) {
   }
 }
 
-function drawPlayerCar(ctx, lane) {
-  const x = lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+function drawPlayerCar(ctx, lane, xOverride = null) {
+  const x = xOverride !== null ? xOverride : lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
   const y = CANVAS_HEIGHT - CAR_HEIGHT - 20;
   // Car body
   ctx.save();
@@ -221,6 +221,8 @@ export default function Game() {
   const [shieldEnd, setShieldEnd] = useState(0);
   const [slowmoActive, setSlowmoActive] = useState(false);
   const [slowmoEnd, setSlowmoEnd] = useState(0);
+  const [carX, setCarX] = useState(() => 1 * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2);
+  const carXRef = useRef(carX);
 
   // Obstacles state (not using React state for performance)
   const obstaclesRef = useRef([]);
@@ -242,6 +244,27 @@ export default function Game() {
   // Keep playerLaneRef in sync with playerLane
   useEffect(() => {
     playerLaneRef.current = playerLane;
+  }, [playerLane]);
+
+  // Animate car X position on lane change
+  useEffect(() => {
+    const targetX = playerLane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+    let animFrame;
+    function animate() {
+      const current = carXRef.current;
+      const diff = targetX - current;
+      if (Math.abs(diff) < 0.3) {
+        carXRef.current = targetX;
+        setCarX(targetX);
+        return;
+      }
+      const next = current + diff * 0.55;
+      carXRef.current = next;
+      setCarX(next);
+      animFrame = requestAnimationFrame(animate);
+    }
+    animate();
+    return () => cancelAnimationFrame(animFrame);
   }, [playerLane]);
 
   // Draw everything
@@ -269,7 +292,7 @@ export default function Game() {
     if (shieldActive) {
       ctx.save();
       const lane = playerLaneRef.current;
-      const x = lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2 + CAR_WIDTH / 2;
+      const x = carXRef.current + CAR_WIDTH / 2;
       const y = CANVAS_HEIGHT - CAR_HEIGHT - 20 + CAR_HEIGHT / 2;
       ctx.beginPath();
       ctx.arc(x, y, CAR_WIDTH / 1.6, 0, 2 * Math.PI);
@@ -281,7 +304,7 @@ export default function Game() {
       ctx.globalAlpha = 1;
       ctx.restore();
     }
-    drawPlayerCar(ctx, playerLaneRef.current);
+    drawPlayerCar(ctx, playerLaneRef.current, carXRef.current);
     // Slow-mo overlay
     if (slowmoActive) {
       ctx.save();
@@ -519,6 +542,14 @@ export default function Game() {
     };
   }, [gameOver, difficulty]);
 
+  // Arrow button handlers
+  function handleLeft() {
+    setPlayerLane(lane => Math.max(0, lane - 1));
+  }
+  function handleRight() {
+    setPlayerLane(lane => Math.min(LANE_COUNT - 1, lane + 1));
+  }
+
   // Restart game
   function handleRestart() {
     setGameOver(false);
@@ -563,6 +594,29 @@ export default function Game() {
         height={CANVAS_HEIGHT}
         style={{ borderRadius: 16, boxShadow: "0 4px 32px #0007" }}
       />
+      {/* Arrow buttons for mobile */}
+      <div className="flex w-full justify-between max-w-[360px] mt-4 sm:hidden">
+        <button
+          aria-label="Move Left"
+          className="bg-gray-800 text-white rounded-full w-16 h-16 flex items-center justify-center text-3xl shadow active:bg-gray-700"
+          onClick={handleLeft}
+        >
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="18" cy="18" r="18" fill="#222" />
+            <path d="M22 10L14 18L22 26" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <button
+          aria-label="Move Right"
+          className="bg-gray-800 text-white rounded-full w-16 h-16 flex items-center justify-center text-3xl shadow active:bg-gray-700"
+          onClick={handleRight}
+        >
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="18" cy="18" r="18" fill="#222" />
+            <path d="M14 10L22 18L14 26" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
       <div className="mt-4 text-white text-lg font-bold tracking-wide">Endless Traffic Dodger</div>
       <div className="mt-2 text-gray-400 text-sm">Use 1213 arrow keys to move</div>
       <div className="mt-2 text-yellow-300 text-xl font-mono">Score: {score}</div>
